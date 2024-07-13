@@ -1,5 +1,3 @@
-# File: pages/3_AndroidApp_EventAnalysis.py
-
 import streamlit as st
 import pandas as pd
 from google.oauth2 import service_account
@@ -18,28 +16,28 @@ def run_query(query):
     return query_job.to_dataframe()
 
 sql_query = """
-SELECT 
-    t1.Dates,
-    t1.User_Type,
-    t1.User_ID,
-    t1.Install_Type,
-    t1.App_Version,
-    t1.OS_Version,
-    t1.Country,
-    t1.Region,
-    t1.City,
-    t1.Events, 
-    t1.Users_Count, 
-    CASE
-        WHEN t1.User_ID = 'N/A' THEN 0
-        ELSE COALESCE(t2.Total_Installs, 0)
-    END AS Total_Installs
-FROM 
-    `swap-vc-prod.analytics_325691371.View1` t1
-LEFT JOIN 
-    `swap-vc-prod.beesi_google_play.Installs_Data_V1` t2
-ON 
-    PARSE_DATE('%Y%m%d', t1.Dates) = t2.Date
+SELECT
+  t1.Dates,
+  t1.User_Type,
+  t1.User_ID,
+  t1.Install_Type,
+  t1.App_Version,
+  t1.OS_Version,
+  t1.Country,
+  t1.Region,
+  t1.City,
+  t1.Events,
+  t1.Users_Count,
+  CASE
+    WHEN t1.User_ID = 'N/A' THEN 0
+    ELSE COALESCE(t2.Total_Installs, 0)
+  END AS Total_Installs
+FROM
+  `swap-vc-prod.analytics_325691371.View1` t1
+LEFT JOIN
+  `swap-vc-prod.beesi_google_play.Installs_Data_V1` t2
+ON
+  PARSE_DATE('%Y%m%d', t1.Dates) = t2.Date
 """
 
 df = run_query(sql_query)
@@ -54,6 +52,10 @@ date_range = st.sidebar.date_input('Select Date Range', [df.index.min(), df.inde
 user_type_filter = st.sidebar.multiselect('Select User Type', df['User_Type'].unique())
 install_type_filter = st.sidebar.multiselect('Select Install Type', df['Install_Type'].unique())
 country_filter = st.sidebar.multiselect('Select Countries', df['Country'].unique())
+region_filter = st.sidebar.multiselect('Select Regions', df['Region'].unique())
+city_filter = st.sidebar.multiselect('Select Cities', df['City'].unique())
+os_version_filter = st.sidebar.multiselect('Select OS Versions', df['OS_Version'].unique())
+app_version_filter = st.sidebar.multiselect('Select App Versions', df['App_Version'].unique())
 
 # Apply filters
 df_filtered = df[(df.index.date >= date_range[0]) & (df.index.date <= date_range[1])]
@@ -63,15 +65,23 @@ if install_type_filter:
     df_filtered = df_filtered[df_filtered['Install_Type'].isin(install_type_filter)]
 if country_filter:
     df_filtered = df_filtered[df_filtered['Country'].isin(country_filter)]
+if region_filter:
+    df_filtered = df_filtered[df_filtered['Region'].isin(region_filter)]
+if city_filter:
+    df_filtered = df_filtered[df_filtered['City'].isin(city_filter)]
+if os_version_filter:
+    df_filtered = df_filtered[df_filtered['OS_Version'].isin(os_version_filter)]
+if app_version_filter:
+    df_filtered = df_filtered[df_filtered['App_Version'].isin(app_version_filter)]
 
 # Calculate Total_Installs separately
 total_installs = df_filtered.groupby(level=0)['Total_Installs'].max()
 
 # Pivot the data for Users_Count
-pivot_df = pd.pivot_table(df_filtered, 
-                          values='Users_Count', 
-                          index=df_filtered.index, 
-                          columns='Events', 
+pivot_df = pd.pivot_table(df_filtered,
+                          values='Users_Count',
+                          index=df_filtered.index,
+                          columns='Events',
                           aggfunc='sum',
                           fill_value=0)
 
@@ -92,7 +102,7 @@ pivot_df = pivot_df.sort_index(ascending=False)
 
 # Display the pivoted DataFrame
 st.dataframe(pivot_df.style.format({col: '{:.0f}' for col in pivot_df.columns if not col.endswith('Percentage')})\
-                           .format({col: '{:.2f}%' for col in pivot_df.columns if col.endswith('Percentage')}),
+             .format({col: '{:.2f}%' for col in pivot_df.columns if col.endswith('Percentage')}),
              use_container_width=True)
 
 # Download button
