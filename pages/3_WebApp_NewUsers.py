@@ -24,7 +24,7 @@ SELECT
   t1.Country,
   t1.Region,
   t1.City,
-  t2.User_ID as User_ID
+  COUNT(DISTINCT t2.User_ID) as New_Users
 FROM
   `swap-vc-prod.analytics_325691371.WebApp_UserData` AS t1
 INNER JOIN
@@ -44,7 +44,7 @@ WHERE
     'Open_App_Whatsapp_Share_App_With_Friends'
   )
 GROUP BY
-  1,2,3,4,5,6,7
+  1,2,3,4,5,6
 """
 
 df = run_query(sql_query)
@@ -75,10 +75,10 @@ if device_filter:
     df = df[df['Device'].isin(device_filter)]
 
 pivot_df = df.pivot_table(
-    values='User_ID',
+    values='New_Users',
     index='Dates',
     columns='Event_Name',
-    aggfunc=lambda x: len(x.unique()),
+    aggfunc='sum',
     fill_value=0
 )
 

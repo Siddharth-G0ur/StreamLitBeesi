@@ -1,23 +1,17 @@
-import os
-import logging
-import warnings
 import streamlit as st
 import pandas as pd
 from google.oauth2 import service_account
 from google.cloud import bigquery
 
-os.environ['GRPC_PYTHON_LOG_LEVEL'] = 'error'
-logging.getLogger('google.cloud.bigquery.client').setLevel(logging.ERROR)
-logging.getLogger('google.auth').setLevel(logging.ERROR)
-warnings.filterwarnings("ignore", category=UserWarning)
-logging.getLogger().setLevel(logging.ERROR)
-
-
 # Set up Google Cloud credentials
-credentials = service_account.Credentials.from_service_account_info(
-    st.secrets["gcp_service_account"]
-)
-client = bigquery.Client(credentials=credentials)
+try:
+    credentials = service_account.Credentials.from_service_account_info(
+        st.secrets["gcp_service_account"]
+    )
+    client = bigquery.Client(credentials=credentials)
+except Exception as e:
+    st.error(f"Failed to set up Google Cloud credentials: {str(e)}")
+    st.stop()
 
 # Streamlit page configuration
 st.set_page_config(page_title="WebApp User Analytics", page_icon="📊", layout="wide")
@@ -26,22 +20,26 @@ st.title("WebApp User Analytics Dashboard")
 # Function to run BigQuery
 @st.cache_data(ttl=600)
 def run_query(query):
-    query_job = client.query(query)
-    return query_job.to_dataframe()
+    try:
+        query_job = client.query(query)
+        return query_job.to_dataframe()
+    except Exception as e:
+        st.error(f"Failed to run query: {str(e)}")
+        return pd.DataFrame()  # Return an empty DataFrame on error
 
-# SQL query for Event Analytics
+# SQL queries (use the modified versions from the previous response)
 event_query = """
 SELECT
-    t1.Dates,
+    COALESCE(CAST(t1.Dates AS STRING), CAST(CURRENT_DATE() AS STRING)) AS Dates,
     t1.Event_Name,
-    t1.Device,
-    t1.Country,
-    t1.Region,
-    t1.City,
+    COALESCE(t1.Device, 'Unknown') AS Device,
+    COALESCE(t1.Country, 'Unknown') AS Country,
+    COALESCE(t1.Region, 'Unknown') AS Region,
+    COALESCE(t1.City, 'Unknown') AS City,
     t1.User_ID as User_ID,
     (CASE 
-        WHEN t1.Dates = t2.Dates THEN "New User"
-        ELSE "Returning User"
+        WHEN t1.Dates = t2.Dates THEN 'New User'
+        ELSE 'Returning User'
     END) as User_Type
 FROM
     `swap-vc-prod.analytics_325691371.WebApp_UserData` AS t1
@@ -63,91 +61,93 @@ WHERE
     )
 """
 
-# SQL query for Scroll Depth Analytics
 scroll_query = """
 WITH
  t1 AS (
 SELECT
-t1.Dates AS Dates,
-t1.Event_Name,
-t1.Device,
-t1.Country,
-t1.Region,
-t1.City,
-t1.User_ID AS User_ID,
-(CASE
-WHEN t1.Dates = t2.Dates THEN "New User"
-ELSE "Returning User"
-END
-) AS User_Type
+    COALESCE(CAST(t1.Dates AS STRING), CAST(CURRENT_DATE() AS STRING)) AS Dates,
+    t1.Event_Name,
+    COALESCE(t1.Device, 'Unknown') AS Device,
+    COALESCE(t1.Country, 'Unknown') AS Country,
+    COALESCE(t1.Region, 'Unknown') AS Region,
+    COALESCE(t1.City, 'Unknown') AS City,
+    t1.User_ID AS User_ID,
+    (CASE
+        WHEN t1.Dates = t2.Dates THEN 'New User'
+        ELSE 'Returning User'
+    END) AS User_Type
 FROM
-`swap-vc-prod.analytics_325691371.WebApp_UserData` AS t1
+    `swap-vc-prod.analytics_325691371.WebApp_UserData` AS t1
 LEFT JOIN
-`swap-vc-prod.analytics_325691371.New_User` AS t2
+    `swap-vc-prod.analytics_325691371.New_User` AS t2
 ON
-t1.User_ID = t2.User_ID
+    t1.User_ID = t2.User_ID
 WHERE
-t1.Event_Name IN ( 'home_page_view',
-'Open_App_Playstore',
-'Open_App_Appstore',
-'Open_App_Yes_But_Kaise',
-'Open_App_Haan_Dost_Hain',
-'Open_App_Nudge_Floating',
-'Open_App_Nudge_1',
-'Open_App_Nudge_2',
-'Open_App_Whatsapp_Share_App_With_Friends' ) ),
+    t1.Event_Name IN ( 'home_page_view',
+    'Open_App_Playstore',
+    'Open_App_Appstore',
+    'Open_App_Yes_But_Kaise',
+    'Open_App_Haan_Dost_Hain',
+    'Open_App_Nudge_Floating',
+    'Open_App_Nudge_1',
+    'Open_App_Nudge_2',
+    'Open_App_Whatsapp_Share_App_With_Friends' ) ),
 t2 AS (
 SELECT
-event_date AS Dates,
-user_pseudo_id AS User_ID,
-MAX(COALESCE((
-SELECT
-value.int_value
+    COALESCE(CAST(event_date AS STRING), CAST(CURRENT_DATE() AS STRING)) AS Dates,
+    user_pseudo_id AS User_ID,
+    MAX(COALESCE((
+    SELECT
+        value.int_value
+    FROM
+        UNNEST(event_params)
+    WHERE
+        KEY = 'percent_scrolled'), 0)) AS max_scroll_percent
 FROM
-UNNEST(event_params)
+    `swap-vc-prod.analytics_325691371.events_*`
 WHERE
-KEY = 'percent_scrolled'), 0)) AS max_scroll_percent
-FROM
-`swap-vc-prod.analytics_325691371.events_*`
-WHERE
-event_name = 'Scroll'
+    event_name = 'Scroll'
 GROUP BY
-event_date,
-user_pseudo_id )
+    event_date,
+    user_pseudo_id )
 SELECT
-t1.Dates,
-t1.User_ID,
-t1.User_Type,
-COALESCE(t2.max_scroll_percent, 0) AS max_scroll_percent
+    COALESCE(t1.Dates, CAST(CURRENT_DATE() AS STRING)) AS Dates,
+    t1.User_ID,
+    t1.User_Type,
+    COALESCE(t2.max_scroll_percent, 0) AS max_scroll_percent
 FROM
-t1
+    t1
 LEFT JOIN
-t2
+    t2
 ON
-t1.Dates = t2.Dates
+    t1.Dates = t2.Dates
 AND t1.User_ID = t2.User_ID
 GROUP BY
-1,
-2,
-3,
-4
+    1,
+    2,
+    3,
+    4
 ORDER BY
-1 desc
+    1 desc
 """
 
 # Fetch data
-event_df = run_query(event_query)
-event_df['Dates'] = pd.to_datetime(event_df['Dates'])
+try:
+    event_df = run_query(event_query)
+    event_df['Dates'] = pd.to_datetime(event_df['Dates'])
 
-scroll_df = run_query(scroll_query)
-scroll_df['Dates'] = pd.to_datetime(scroll_df['Dates'])
+    scroll_df = run_query(scroll_query)
+    scroll_df['Dates'] = pd.to_datetime(scroll_df['Dates'])
+except Exception as e:
+    st.error(f"Error processing query results: {str(e)}")
+    st.stop()
 
 # Event Analytics
 st.header("WebApp Event Analytics")
 
 # Function to clean filter options
 def clean_options(options):
-    return [opt for opt in options if opt and str(opt).lower() != 'none']
+    return sorted([opt for opt in options if opt and str(opt).lower() not in ['none', 'unknown', 'nan']])
 
 # Create columns for filter categories
 col1, col2 = st.columns(2)
@@ -182,17 +182,17 @@ with st.expander("Location Filter", expanded=True):
 # Apply filters for Event Analytics
 mask_event = (event_df['Dates'].dt.date >= start_date_event) & (event_df['Dates'].dt.date <= end_date_event)
 if country_filter:
-    mask_event &= event_df['Country'].isin(country_filter)
+    mask_event &= event_df['Country'].fillna('Unknown').isin(country_filter)
 if region_filter:
-    mask_event &= event_df['Region'].isin(region_filter)
+    mask_event &= event_df['Region'].fillna('Unknown').isin(region_filter)
 if city_filter:
-    mask_event &= event_df['City'].isin(city_filter)
+    mask_event &= event_df['City'].fillna('Unknown').isin(city_filter)
 if device_filter:
-    mask_event &= event_df['Device'].isin(device_filter)
+    mask_event &= event_df['Device'].fillna('Unknown').isin(device_filter)
 if user_type_filter_event:
-    mask_event &= event_df['User_Type'].isin(user_type_filter_event)
+    mask_event &= event_df['User_Type'].fillna('Unknown').isin(user_type_filter_event)
 
-filtered_event_df = event_df[mask_event]
+filtered_event_df = event_df[mask_event].copy()
 
 # Process data for Event Analytics
 pivot_df = filtered_event_df.pivot_table(
@@ -233,7 +233,7 @@ st.dataframe(styled_event_df, width=1500, height=500)
 # Download button for event data
 csv_event = pivot_df.to_csv(index=True)
 st.download_button(
-    label="Download event data as CSV",
+    label="Download Event Data as CSV",
     data=csv_event,
     file_name="event_results.csv",
     mime="text/csv",
@@ -254,18 +254,23 @@ with col1:
 # Other Filters
 with col2:
     with st.expander("Other Filters", expanded=True):
-        user_type_filter_scroll = st.multiselect('User Type', options=scroll_df['User_Type'].unique(), key='user_type_filter_scroll')
+        user_type_options_scroll = clean_options(scroll_df['User_Type'].unique())
+        user_type_filter_scroll = st.multiselect('User Type', options=user_type_options_scroll, key='user_type_filter_scroll')
 
 # Apply filters for Scroll Depth Analytics
 mask_scroll = (scroll_df['Dates'].dt.date >= start_date_scroll) & (scroll_df['Dates'].dt.date <= end_date_scroll)
 if user_type_filter_scroll:
-    mask_scroll &= scroll_df['User_Type'].isin(user_type_filter_scroll)
+    mask_scroll &= scroll_df['User_Type'].fillna('Unknown').isin(user_type_filter_scroll)
 
-filtered_scroll_df = scroll_df[mask_scroll]
+filtered_scroll_df = scroll_df[mask_scroll].copy()
 
 # Process data for Scroll Depth Analytics
 def process_scroll_data(df):
-    df['Dates'] = df['Dates'].dt.date
+    # Create an explicit copy of the DataFrame
+    df = df.copy()
+    # Use .loc to modify the DataFrame
+    df.loc[:, 'Dates'] = df['Dates'].fillna(pd.Timestamp.now().date())
+    
     total_users = df.groupby('Dates')['User_ID'].nunique().reset_index(name='user_count')
     
     interacted_users = df[df['max_scroll_percent'] > 0].groupby('Dates')['User_ID'].nunique().reset_index(name='interacted_users')
@@ -281,6 +286,7 @@ def process_scroll_data(df):
         total_users[f'percent_scrolled_{percent}'] = (total_users[f'scrolled_{percent}'] / total_users['user_count'] * 100).round(2)
     
     total_users = total_users.sort_values('Dates', ascending=False)
+    total_users['Dates'] = total_users['Dates'].dt.strftime('%Y-%m-%d')
     return total_users
 
 scroll_pivot = process_scroll_data(filtered_scroll_df)
@@ -322,7 +328,7 @@ st.dataframe(styled_scroll_df, width=1500, height=500)
 # Download button for scroll depth data
 scroll_csv = scroll_pivot.reset_index().to_csv(index=False)
 st.download_button(
-    label="Download scroll depth data as CSV",
+    label="Download Scroll Depth Data as CSV",
     data=scroll_csv,
     file_name="scroll_depth_results.csv",
     mime="text/csv",
