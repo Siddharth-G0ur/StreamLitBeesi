@@ -2,32 +2,45 @@ import streamlit as st
 import pandas as pd
 from google.oauth2 import service_account
 from google.cloud import bigquery
+import asyncio
 
 # Set up Google Cloud credentials
-try:
-    credentials = service_account.Credentials.from_service_account_info(
-        st.secrets["gcp_service_account"]
-    )
-    client = bigquery.Client(credentials=credentials)
-except Exception as e:
-    st.error(f"Failed to set up Google Cloud credentials: {str(e)}")
+def get_bigquery_client():
+    try:
+        credentials = service_account.Credentials.from_service_account_info(
+            st.secrets["gcp_service_account"]
+        )
+        return bigquery.Client(credentials=credentials)
+    except Exception as e:
+        st.error(f"Failed to set up BigQuery client: {str(e)}")
+        return None
+
+client = get_bigquery_client()
+
+if client is None:
+    st.error("Unable to proceed without BigQuery client. Please check your credentials and try again.")
     st.stop()
 
-# Streamlit page configuration
-st.set_page_config(page_title="WebApp User Analytics", page_icon="📊", layout="wide")
-st.title("WebApp User Analytics Dashboard")
+# Asynchronous query execution
+async def run_query_async(query):
+    query_job = client.query(query)
+    while True:
+        query_job.reload()
+        if query_job.state == 'DONE':
+            if query_job.error_result:
+                raise Exception(query_job.error_result)
+            break
+        await asyncio.sleep(1)
+    return query_job.to_dataframe()
 
-# Function to run BigQuery
-@st.cache_data(ttl=600)
-def run_query(query):
-    try:
-        query_job = client.query(query)
-        return query_job.to_dataframe()
-    except Exception as e:
-        st.error(f"Failed to run query: {str(e)}")
-        return pd.DataFrame()  # Return an empty DataFrame on error
+# Function to run both queries in parallel
+async def run_parallel_queries(event_query, scroll_query):
+    event_task = asyncio.create_task(run_query_async(event_query))
+    scroll_task = asyncio.create_task(run_query_async(scroll_query))
+    event_df, scroll_df = await asyncio.gather(event_task, scroll_task)
+    return event_df, scroll_df
 
-# SQL queries (use the modified versions from the previous response)
+# Your queries
 event_query = """
 SELECT
     COALESCE(CAST(t1.Dates AS STRING), CAST(CURRENT_DATE() AS STRING)) AS Dates,
@@ -131,15 +144,24 @@ ORDER BY
     1 desc
 """
 
-# Fetch data
-try:
-    event_df = run_query(event_query)
-    event_df['Dates'] = pd.to_datetime(event_df['Dates'])
+# Streamlit app
+st.title("WebApp User Analytics Dashboard")
 
-    scroll_df = run_query(scroll_query)
+# Fetch data for both queries in parallel
+try:
+    loop = asyncio.new_event_loop()
+    asyncio.set_event_loop(loop)
+    event_df, scroll_df = loop.run_until_complete(run_parallel_queries(event_query, scroll_query))
+except Exception as e:
+    st.error(f"Error executing queries: {str(e)}")
+    st.stop()
+
+# Convert 'Dates' to datetime
+try:
+    event_df['Dates'] = pd.to_datetime(event_df['Dates'])
     scroll_df['Dates'] = pd.to_datetime(scroll_df['Dates'])
 except Exception as e:
-    st.error(f"Error processing query results: {str(e)}")
+    st.error(f"Error converting dates: {str(e)}")
     st.stop()
 
 # Event Analytics
