@@ -6,8 +6,8 @@ import asyncio
 
 st.set_page_config(page_title="Scroll Depth Analytics Dashboard", page_icon="📊", layout="wide", initial_sidebar_state="collapsed")
 
-if st.button("← Back to Home"):
-    st.switch_page("home.py")
+# if st.button("← Back to Home"):
+#     st.switch_page("home.py")
 
 st.markdown("""
 <style>

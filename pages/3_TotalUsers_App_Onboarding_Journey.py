@@ -5,8 +5,8 @@ from google.cloud import bigquery
 
 st.set_page_config(page_title="Android App Total User Events Dashboard", page_icon="📊", layout="wide", initial_sidebar_state="collapsed")
 
-if st.button("← Back to Home"):
-    st.switch_page("home.py")
+# if st.button("← Back to Home"):
+#     st.switch_page("home.py")
 
 st.markdown("""
 <style>
