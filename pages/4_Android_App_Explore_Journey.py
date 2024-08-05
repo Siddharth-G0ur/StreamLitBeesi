@@ -5,9 +5,6 @@ from google.cloud import bigquery
 
 st.set_page_config(page_title="Android App Explore Journey Dashboard", page_icon="📊", layout="wide", initial_sidebar_state="collapsed")
 
-# if st.button("← Back to Home"):
-#     st.switch_page("home.py")
-
 st.markdown("""
 <style>
     .stDataFrame {
@@ -40,45 +37,62 @@ def run_query(query):
     query_job = client.query(query)
     return query_job.to_dataframe()
 
-sql_query = """
-SELECT
-    event_date,
-    user_pseudo_id,
-    (SELECT value.string_value FROM UNNEST(user_properties) WHERE KEY = 'beesi_user_id') AS beesi_user_id,
+sql_query = """SELECT
+  PARSE_DATE('%Y%m%d', event_date) AS event_date,
+  (SELECT value.string_value FROM UNNEST(user_properties) WHERE KEY = 'beesi_user_id') AS newly_loggedin_user,
+  COALESCE((SELECT value.string_value FROM UNNEST(user_properties) WHERE KEY = 'beesi_user_age'),'NA') AS age,
+  COALESCE((SELECT value.string_value FROM UNNEST(user_properties) WHERE KEY = 'beesi_user_profession'),'NA') AS profession,
+  COALESCE((SELECT value.string_value FROM UNNEST(user_properties) WHERE KEY = 'beesi_user_gender'),'NA') AS gender,
+  CASE
+    WHEN event_name = 'screen_load' AND (SELECT value.string_value FROM UNNEST(event_params) WHERE KEY = 'screen_name') = 'home_screen' THEN 'User landed on homepage'
+    WHEN event_name = 'view_click' AND (SELECT value.string_value FROM UNNEST(event_params) WHERE KEY = 'screen_name') = 'home_screen' AND (SELECT value.string_value FROM UNNEST(event_params) WHERE KEY = 'view_id') = 'kyun_karni_hai_beesi' THEN 'User click on kyun karni hai beesi'
+    WHEN event_name = 'screen_load' AND (SELECT value.string_value FROM UNNEST(event_params) WHERE KEY = 'screen_name') = 'kyun_karni_hai_beesi' THEN 'User land on kyun karni hai beesi'
+    WHEN event_name = 'view_click' AND (SELECT value.string_value FROM UNNEST(event_params) WHERE KEY = 'screen_name') = 'kyun_karni_hai_beesi' AND (SELECT value.string_value FROM UNNEST(event_params) WHERE KEY = 'view_id') = 'cool' THEN 'User click on cool on kyun karni hai beesi'
+    WHEN event_name = 'view_click' AND (SELECT value.string_value FROM UNNEST(event_params) WHERE KEY = 'screen_name') = 'kyun_karni_hai_beesi' AND (SELECT value.string_value FROM UNNEST(event_params) WHERE KEY = 'view_id') = 'back_button' THEN 'User click on back button on kyun karni hai beesi'
+    WHEN event_name = 'view_click' AND (SELECT value.string_value FROM UNNEST(event_params) WHERE KEY = 'screen_name') = 'home_screen' AND (SELECT value.string_value FROM UNNEST(event_params) WHERE KEY = 'view_id') = 'beesi_kya_hai' THEN 'User click on beesi kya hai'
+    WHEN event_name = 'screen_load' AND (SELECT value.string_value FROM UNNEST(event_params) WHERE KEY = 'screen_name') = 'beesi_kya_hai' THEN 'User land on beesi kya hai screen'
+    WHEN event_name = 'play_player' AND (SELECT value.string_value FROM UNNEST(event_params) WHERE KEY = 'screen_name') = 'beesi_kya_hai' THEN 'User click on play button on beesi kya hai screen'
+    WHEN event_name = 'pause_player' AND (SELECT value.string_value FROM UNNEST(event_params) WHERE KEY = 'screen_name') = 'beesi_kya_hai' THEN 'User click on pause button on sampling UI video'
+    WHEN event_name = 'view_click' AND (SELECT value.string_value FROM UNNEST(event_params) WHERE KEY = 'screen_name') = 'beesi_kya_hai' AND (SELECT value.string_value FROM UNNEST(event_params) WHERE KEY = 'view_id') = 'back_button' THEN 'User click on back button on beesi kya hai screen'
+    WHEN event_name = 'view_click' AND (SELECT value.string_value FROM UNNEST(event_params) WHERE KEY = 'screen_name') = 'beesi_kya_hai' AND (SELECT value.string_value FROM UNNEST(event_params) WHERE KEY = 'view_id') = 'create_beesi_group' THEN 'User click on create beesi group on beesi kya hai screen'
+    ELSE 'Other Actions'
+  END AS actions,
+  COALESCE(
     CASE
-      WHEN event_name = 'screen_load' AND (SELECT value.string_value FROM UNNEST(event_params) WHERE KEY = 'screen_name') = 'home_screen' THEN 'User landed on homepage'
-      WHEN event_name = 'view_click' AND (SELECT value.string_value FROM UNNEST(event_params) WHERE KEY = 'screen_name') = 'home_screen' AND (SELECT value.string_value FROM UNNEST(event_params) WHERE KEY = 'view_id') = 'kyun_karni_hai_beesi' THEN 'User click on kyun karni hai beesi'
-      WHEN event_name = 'screen_load' AND (SELECT value.string_value FROM UNNEST(event_params) WHERE KEY = 'screen_name') = 'kyun_karni_hai_beesi' THEN 'User land on kyun karni hai beesi'
-      WHEN event_name = 'view_click' AND (SELECT value.string_value FROM UNNEST(event_params) WHERE KEY = 'screen_name') = 'kyun_karni_hai_beesi' AND (SELECT value.string_value FROM UNNEST(event_params) WHERE KEY = 'view_id') = 'cool' THEN 'User click on cool on kyun karni hai beesi'
-      WHEN event_name = 'view_click' AND (SELECT value.string_value FROM UNNEST(event_params) WHERE KEY = 'screen_name') = 'kyun_karni_hai_beesi' AND (SELECT value.string_value FROM UNNEST(event_params) WHERE KEY = 'view_id') = 'back_button' THEN 'User click on back button on kyun karni hai beesi'
-      WHEN event_name = 'view_click' AND (SELECT value.string_value FROM UNNEST(event_params) WHERE KEY = 'screen_name') = 'home_screen' AND (SELECT value.string_value FROM UNNEST(event_params) WHERE KEY = 'view_id') = 'beesi_kya_hai' THEN 'User click on beesi kya hai'
-      WHEN event_name = 'screen_load' AND (SELECT value.string_value FROM UNNEST(event_params) WHERE KEY = 'screen_name') = 'beesi_kya_hai' THEN 'User land on beesi kya hai screen'
-      WHEN event_name = 'play_player' AND (SELECT value.string_value FROM UNNEST(event_params) WHERE KEY = 'screen_name') = 'beesi_kya_hai' THEN 'User click on play button on beesi kya hai screen'
-      WHEN event_name = 'pause_player' AND (SELECT value.string_value FROM UNNEST(event_params) WHERE KEY = 'screen_name') = 'beesi_kya_hai' THEN 'User click on pause button on sampling UI video'
-      WHEN event_name = 'view_click' AND (SELECT value.string_value FROM UNNEST(event_params) WHERE KEY = 'screen_name') = 'beesi_kya_hai' AND (SELECT value.string_value FROM UNNEST(event_params) WHERE KEY = 'view_id') = 'back_button' THEN 'User click on back button on beesi kya hai screen'
-      WHEN event_name = 'view_click' AND (SELECT value.string_value FROM UNNEST(event_params) WHERE KEY = 'screen_name') = 'beesi_kya_hai' AND (SELECT value.string_value FROM UNNEST(event_params) WHERE KEY = 'view_id') = 'create_beesi_group' THEN 'User click on create beesi group on beesi kya hai screen'
-    END AS actions,
-    COALESCE(
-      CASE
-        WHEN (SELECT value.string_value FROM UNNEST(event_params) WHERE KEY = 'duration') IS NOT NULL THEN
-          CAST(SPLIT((SELECT value.string_value FROM UNNEST(event_params) WHERE KEY = 'duration'), ':')[OFFSET(0)] AS INT64) * 60 +
-          CAST(SPLIT((SELECT value.string_value FROM UNNEST(event_params) WHERE KEY = 'duration'), ':')[OFFSET(1)] AS INT64)
-        ELSE NULL
-      END,
-      0
-    ) AS duration_seconds,
-    geo.country as country,
-    geo.region as region,
-    geo.city as city,
-    app_info.version as app_version,
-    device.operating_system_version as os_version
-  FROM
-    `swap-vc-prod.analytics_325691371.events_*`
-    where platform = 'ANDROID'
-"""
+      WHEN (SELECT value.string_value FROM UNNEST(event_params) WHERE KEY = 'duration') IS NOT NULL 
+      THEN CAST(SPLIT((SELECT value.string_value FROM UNNEST(event_params) WHERE KEY = 'duration'), ':')[OFFSET(0)] AS int64) * 60 + 
+           CAST(SPLIT((SELECT value.string_value FROM UNNEST(event_params) WHERE KEY = 'duration'), ':')[OFFSET(1)] AS int64)
+      ELSE NULL
+    END, 0
+  ) AS duration_seconds,
+  geo.country AS country,
+  geo.region AS region,
+  geo.city AS city,
+  app_info.version AS app_version,
+  device.operating_system_version AS os_version
+FROM `swap-vc-prod.analytics_325691371.events_*`
+WHERE
+  platform = 'ANDROID'
+  AND (SELECT value.string_value FROM UNNEST(user_properties) WHERE KEY = 'beesi_user_id') IS NOT NULL
+  AND PARSE_DATE('%Y%m%d', event_date) = safe.date(safe.timestamp_millis((SELECT value.int_value FROM UNNEST(user_properties) WHERE KEY = 'first_open_time')))
+  AND (
+    (event_name = 'screen_load' AND (SELECT value.string_value FROM UNNEST(event_params) WHERE KEY = 'screen_name') = 'home_screen')
+    OR (event_name = 'view_click' AND (SELECT value.string_value FROM UNNEST(event_params) WHERE KEY = 'screen_name') = 'home_screen' AND (SELECT value.string_value FROM UNNEST(event_params) WHERE KEY = 'view_id') = 'kyun_karni_hai_beesi')
+    OR (event_name = 'screen_load' AND (SELECT value.string_value FROM UNNEST(event_params) WHERE KEY = 'screen_name') = 'kyun_karni_hai_beesi')
+    OR (event_name = 'view_click' AND (SELECT value.string_value FROM UNNEST(event_params) WHERE KEY = 'screen_name') = 'kyun_karni_hai_beesi' AND (SELECT value.string_value FROM UNNEST(event_params) WHERE KEY = 'view_id') = 'cool')
+    OR (event_name = 'view_click' AND (SELECT value.string_value FROM UNNEST(event_params) WHERE KEY = 'screen_name') = 'kyun_karni_hai_beesi' AND (SELECT value.string_value FROM UNNEST(event_params) WHERE KEY = 'view_id') = 'back_button')
+    OR (event_name = 'view_click' AND (SELECT value.string_value FROM UNNEST(event_params) WHERE KEY = 'screen_name') = 'home_screen' AND (SELECT value.string_value FROM UNNEST(event_params) WHERE KEY = 'view_id') = 'beesi_kya_hai')
+    OR (event_name = 'screen_load' AND (SELECT value.string_value FROM UNNEST(event_params) WHERE KEY = 'screen_name') = 'beesi_kya_hai')
+    OR (event_name = 'play_player' AND (SELECT value.string_value FROM UNNEST(event_params) WHERE KEY = 'screen_name') = 'beesi_kya_hai')
+    OR (event_name = 'pause_player' AND (SELECT value.string_value FROM UNNEST(event_params) WHERE KEY = 'screen_name') = 'beesi_kya_hai')
+    OR (event_name = 'view_click' AND (SELECT value.string_value FROM UNNEST(event_params) WHERE KEY = 'screen_name') = 'beesi_kya_hai' AND (SELECT value.string_value FROM UNNEST(event_params) WHERE KEY = 'view_id') = 'back_button')
+    OR (event_name = 'view_click' AND (SELECT value.string_value FROM UNNEST(event_params) WHERE KEY = 'screen_name') = 'beesi_kya_hai' AND (SELECT value.string_value FROM UNNEST(event_params) WHERE KEY = 'view_id') = 'create_beesi_group')
+  )"""
 
 df = run_query(sql_query)
-df['event_date'] = pd.to_datetime(df['event_date'], format='%Y%m%d')
+
+# Convert event_date to datetime if it's not already
+df['event_date'] = pd.to_datetime(df['event_date'])
 
 # Function to clean options
 def clean_options(options):
@@ -90,8 +104,8 @@ col1, col2 = st.columns(2)
 # Date Filter
 with col1:
     with st.expander("Date Filter", expanded=True):
-        start_date = st.date_input("Start Date", value=df['event_date'].min(), key='event_start_date')
-        end_date = st.date_input("End Date", value=df['event_date'].max(), key='event_end_date')
+        start_date = st.date_input("Start Date", value=df['event_date'].min().date(), key='event_start_date')
+        end_date = st.date_input("End Date", value=df['event_date'].max().date(), key='event_end_date')
 
 # Other Filters
 with col2:
@@ -114,6 +128,19 @@ with st.expander("Location Filter", expanded=True):
         city_options = clean_options(df['city'].unique())
         city_filter = st.multiselect('City', options=city_options, key='city_filter')
 
+# New filters for gender, age, and profession
+with st.expander("User Demographic Filters", expanded=True):
+    col1, col2, col3 = st.columns(3)
+    with col1:
+        gender_options = clean_options(df['gender'].unique())
+        gender_filter = st.multiselect('Gender', options=gender_options, key='gender_filter')
+    with col2:
+        age_options = clean_options(df['age'].unique())
+        age_filter = st.multiselect('Age', options=age_options, key='age_filter')
+    with col3:
+        profession_options = clean_options(df['profession'].unique())
+        profession_filter = st.multiselect('Profession', options=profession_options, key='profession_filter')
+
 # Apply filters
 df = df[(df['event_date'].dt.date >= start_date) & (df['event_date'].dt.date <= end_date)]
 
@@ -127,17 +154,20 @@ if os_version_filter:
     df = df[df['os_version'].isin(os_version_filter)]
 if app_version_filter:
     df = df[df['app_version'].isin(app_version_filter)]
+if gender_filter:
+    df = df[df['gender'].isin(gender_filter)]
+if age_filter:
+    df = df[df['age'].isin(age_filter)]
+if profession_filter:
+    df = df[df['profession'].isin(profession_filter)]
 
-# Calculate Total Users and Logged-in Users
-total_users = df.groupby('event_date')['user_pseudo_id'].nunique().reset_index()
-logged_in_users = df.groupby('event_date')['beesi_user_id'].nunique().reset_index()
-
-# Merge these counts
-user_counts = total_users.merge(logged_in_users, on='event_date', suffixes=('_total', '_logged_in'))
+# Calculate Total Users
+total_users = df.groupby('event_date')['newly_loggedin_user'].nunique().reset_index()
+total_users = total_users.rename(columns={'newly_loggedin_user': 'Total Users'})
 
 # Create pivot table for actions
 pivot_df = df.pivot_table(
-    values='beesi_user_id',
+    values='newly_loggedin_user',
     index='event_date',
     columns='actions',
     aggfunc='nunique',
@@ -148,14 +178,11 @@ pivot_df = df.pivot_table(
 pivot_df = pivot_df.reset_index()
 
 # Merge the user counts with the pivot table
-pivot_df = pivot_df.merge(user_counts, on='event_date', how='outer')
-
-# Rename the columns
-pivot_df = pivot_df.rename(columns={'user_pseudo_id': 'Total Users', 'beesi_user_id': 'Logged-in Users'})
+pivot_df = pivot_df.merge(total_users, on='event_date', how='outer')
 
 def calculate_watch_duration(group):
     # Get the maximum duration for each user
-    max_durations = group.groupby('beesi_user_id')['duration_seconds'].max()
+    max_durations = group.groupby('newly_loggedin_user')['duration_seconds'].max()
     total_users = len(max_durations)
     
     if total_users == 0:
@@ -177,9 +204,6 @@ def calculate_watch_duration(group):
         'User watched the video for more than 120 seconds': (max_durations > 120).sum() / total_users * 100,
     })
 
-# Update this line to use groupby().apply() with grouped=False
-watch_durations = df.groupby('event_date', group_keys=False).apply(calculate_watch_duration).reset_index()
-
 watch_durations = df.groupby('event_date').apply(calculate_watch_duration).reset_index()
 watch_durations.columns = ['event_date'] + list(watch_durations.columns[1:])
 
@@ -189,19 +213,15 @@ pivot_df = pivot_df.merge(watch_durations, on='event_date', how='left')
 # Fill NaN values with 0
 pivot_df = pivot_df.fillna(0)
 
-# We don't need to calculate percentages for watch duration columns anymore
-# as they are already in percentage form
-
-# For other columns, calculate percentages avoiding division by zero
+# Calculate percentages for other columns
 for col in pivot_df.columns:
-    if col not in ['event_date', 'Total Users', 'Logged-in Users'] and col not in watch_durations.columns:
-        pivot_df[col] = pivot_df.apply(lambda row: 0 if row['Logged-in Users'] == 0 else row[col] / row['Logged-in Users'] * 100, axis=1)
+    if col not in ['event_date', 'Total Users'] and col not in watch_durations.columns:
+        pivot_df[col] = pivot_df.apply(lambda row: 0 if row['Total Users'] == 0 else row[col] / row['Total Users'] * 100, axis=1)
 
-# Define the new column order
+# Define the column order (adjust as needed based on your actual columns)
 column_order = [
     'event_date',
     'Total Users',
-    'Logged-in Users',
     'User landed on homepage',
     'User click on kyun karni hai beesi',
     'User land on kyun karni hai beesi',
@@ -233,8 +253,8 @@ pivot_df.index.name = 'Dates'
 # Display the pivot table
 st.dataframe(
     pivot_df.style
-    .format({col: '{:.0f}' for col in ['Total Users', 'Logged-in Users']})
-    .format({col: '{:.2f}%' for col in pivot_df.columns if col not in ['Total Users', 'Logged-in Users']})
+    .format({col: '{:.0f}' for col in ['Total Users']})
+    .format({col: '{:.2f}%' for col in pivot_df.columns if col not in ['Total Users']})
     .set_properties(**{'text-align': 'right'})
     .set_table_styles([
         {'selector': 'th', 'props': [('text-align', 'left')]},

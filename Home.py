@@ -60,6 +60,7 @@ def main():
         create_button("Explore Journey", "pages/4_Android_App_Explore_Journey.py")
         create_button("Total User Onboarding", "pages/3_TotalUsers_App_Onboarding_Journey.py")
         create_button("New User Onboarding", "pages/2_NewUser_App_Onboarding_Journey.py")
+        create_button("Set Goal Dashboard","pages/Set_Goal_Dashboard.py")
 
 if __name__ == "__main__":
     main()
